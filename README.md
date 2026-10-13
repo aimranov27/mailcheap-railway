@@ -2,7 +2,7 @@
 
 Run [Mailcheap](https://github.com/marclou/mailcheap), Marc Lou's self-hosted newsletter app, on Railway with MongoDB. Write an issue, send it to your list through Amazon SES, and publish it on the web. SES costs about $0.10 per 1,000 emails.
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/TEMPLATE_CODE?utm_medium=integration&utm_source=template&utm_campaign=mailcheap)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/mailcheap?utm_medium=integration&utm_source=template&utm_campaign=mailcheap)
 
 ## What you get
 
