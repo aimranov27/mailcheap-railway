@@ -1,0 +1,69 @@
+# Keeps the template current. Railway shows an "update available" notice to
+# everyone who deployed the template whenever main changes, so only upstream
+# commits that pass the smoke test ever reach main, and at most once a day.
+name: Update Mailcheap
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: update-versions
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for new upstream commits
+        id: check
+        run: |
+          changes="$(./scripts/update-versions.sh)"
+          if [ -z "$changes" ]; then
+            echo "Mailcheap is up to date."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$changes"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "changes<<EOF"
+            echo "$changes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test the new commit
+        if: steps.check.outputs.changed == 'true'
+        run: ./scripts/smoke-test.sh
+
+      - name: Commit, tag and release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANGES: ${{ steps.check.outputs.changes }}
+        run: |
+          ref="$(sed -n 's/^ARG MAILCHEAP_REF=//p' Dockerfile)"
+          tag="v$(date -u +%Y%m%d%H%M)-${ref:0:7}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: update Mailcheap to ${ref:0:12}" -m "$CHANGES"
+          git push origin HEAD:main
+          gh release create "$tag" --title "$tag" --notes "$CHANGES"
+
+      - name: Open an issue if the new commit breaks the template
+        if: failure() && steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANGES: ${{ steps.check.outputs.changes }}
+        run: |
+          title="Automatic update failed the smoke test"
+          if [ -z "$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')" ]; then
+            gh issue create --title "$title" --body "$(printf 'This update was **not** published because the build or smoke test failed:\n\n%s\n\nIf the build failed in patches/apply.sh, upstream changed the upload code and the patch needs updating.\n\nRun: %s/%s/actions/runs/%s\n' "$CHANGES" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          fi

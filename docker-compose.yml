@@ -1,0 +1,41 @@
+# Local copy of the Railway setup: Mailcheap plus MongoDB, each with a volume.
+# Used by scripts/smoke-test.sh. The values below are for local testing only.
+name: mailcheap-smoke
+
+services:
+  mongodb:
+    image: mongo:8.2
+    command: ["mongod", "--setParameter", "diagnosticDataCollectionEnabled=false"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo
+      MONGO_INITDB_ROOT_PASSWORD: smoke-mongo-password
+    volumes:
+      - mongodb:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mailcheap:
+    build: .
+    image: mailcheap-smoke:latest
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "${SMOKE_PORT:-39200}:8080"
+    environment:
+      MONGODB_URI: mongodb://mongo:smoke-mongo-password@mongodb:27017/mailcheap?authSource=admin
+      ADMIN_EMAIL: ${SMOKE_ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${SMOKE_ADMIN_PASSWORD:-smoke-admin-password}
+      SESSION_SECRET: ${SMOKE_SESSION_SECRET:-smoke-session-secret-at-least-32-characters}
+      APP_URL: http://127.0.0.1:${SMOKE_PORT:-39200}
+      SENDING_ENABLED: "true"
+      SES_REGION: us-east-1
+    volumes:
+      - data:/data
+
+volumes:
+  mongodb:
+  data:
